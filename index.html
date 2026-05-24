@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MMK <-> THB Dual Rate Converter</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f4f6f9; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .converter-card { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.05); width: 100%; max-width: 400px; }
+        h2 { text-align: center; color: #333; margin-top: 0; font-size: 22px; }
+        
+        .input-group { margin-bottom: 20px; position: relative; }
+        .input-group label { display: block; margin-bottom: 8px; color: #666; font-weight: 600; font-size: 14px; }
+        .input-group input { width: 100%; padding: 12px 50px 12px 15px; border: 2px solid #e1e8ed; border-radius: 8px; font-size: 16px; outline: none; transition: 0.3s; }
+        .input-group input:focus { border-color: #007bff; }
+        .input-group .currency-badge { position: absolute; right: 15px; top: 38px; color: #999; font-weight: bold; }
+
+        .admin-section { border-top: 1px dashed #ddd; margin-top: 25px; padding-top: 20px; }
+        .admin-toggle { background: none; border: none; color: #007bff; cursor: pointer; font-size: 14px; padding: 0; font-weight: bold; }
+        .admin-panel { display: none; margin-top: 15px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #eee; }
+        .admin-panel label { font-size: 12px; color: #555; font-weight: bold; display: block; margin-bottom: 5px; }
+        .admin-panel input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 12px; font-size: 15px; }
+        .admin-panel button { width: 100%; padding: 10px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        
+        .rate-container { background: #e8f5e9; border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 14px; color: #2e7d32; line-height: 1.6; }
+        .rate-line { display: flex; justify-content: space-between; font-weight: 500; }
+    </style>
+</head>
+<body>
+
+<div class="converter-card">
+    <h2>ငွေလဲနှုန်းတွက်ချက်စက်</h2>
+    
+    <!-- လက်ရှိသတ်မှတ်ထားတဲ့ Rate ၂ မျိုးကို ပြပေးမယ့်နေရာ -->
+    <div class="rate-container">
+        <div class="rate-line">
+            <span>💵 ဘတ်ပေးရင် (ဝယ်ဈေး):</span>
+            <span id="buyRateDisplay">1 THB = 120 MMK</span>
+        </div>
+        <div class="rate-line">
+            <span>💴 ကျပ်ပေးရင် (ရောင်းဈေး):</span>
+            <span id="sellRateDisplay">1 THB = 125 MMK</span>
+        </div>
+    </div>
+
+    <!-- THB Input (ဘတ်ပေးရင်) -->
+    <div class="input-group">
+        <label for="thbInput">ထိုင်းဘတ် (THB) - <span style="color:#28a745; font-size:12px;">ဘတ်ပေးရင် ဒီမှာရိုက်ပါ</span></label>
+        <input type="number" id="thbInput" placeholder="0.00" oninput="convert('THB')">
+        <span class="currency-badge">THB</span>
+    </div>
+
+    <!-- MMK Input (ကျပ်ပေးရင်) -->
+    <div class="input-group">
+        <label for="mmkInput">မြန်မာကျပ် (MMK) - <span style="color:#007bff; font-size:12px;">ကျပ်ပေးရင် ဒီမှာရိုက်ပါ</span></label>
+        <input type="number" id="mmkInput" placeholder="0.00" oninput="convert('MMK')">
+        <span class="currency-badge">MMK</span>
+    </div>
+
+    <!-- Admin Panel (Rate နှစ်မျိုးစလုံး ပြင်ရန်) -->
+    <div class="admin-section">
+        <button class="admin-toggle" onclick="toggleAdmin()">⚙️ Rate ၂ မျိုး ပြင်ဆင်ရန် (Admin Only)</button>
+        <div class="admin-panel" id="adminPanel">
+            <label for="newBuyRate">ဘတ်ပေးရင် ရမည့်နှုန်း (ဝယ်ဈေး):</label>
+            <input type="number" id="newBuyRate" placeholder="ဥပမာ - ၁၂၀">
+
+            <label for="newSellRate">ကျပ်ပေးရင် ကျသင့်မည့်နှုန်း (ရောင်းဈေး):</label>
+            <input type="number" id="newSellRate" placeholder="ဥပမာ - ၁၂၅">
+
+            <button onclick="updateRates()">Rate အသစ်များသိမ်းမည်</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ပုံသေ Rate အဟောင်းများ (စက်ထဲမှာ မရှိသေးရင် သုံးဖို့)
+    let buyRate = 120;  // ဘတ်ပေးရင်
+    let sellRate = 125; // ကျပ်ပေးရင်
+
+    // Page စဖွင့်ချင်း ဖုန်းထဲက နှုန်းထားတွေကို ဆွဲထုတ်ပြသခြင်း
+    window.onload = function() {
+        let savedBuyRate = localStorage.getItem('savedBuyRate');
+        let savedSellRate = localStorage.getItem('savedSellRate');
+        
+        if(savedBuyRate) buyRate = parseFloat(savedBuyRate);
+        if(savedSellRate) sellRate = parseFloat(savedSellRate);
+        
+        displayRates();
+    }
+
+    function displayRates() {
+        document.getElementById('buyRateDisplay').innerText = `1 THB = ${buyRate} MMK`;
+        document.getElementById('sellRateDisplay').innerText = `1 THB = ${sellRate} MMK`;
+    }
+
+    // Auto တွက်ချက်ပေးမယ့် အပိုင်း (ဒီမှာ Rate ၂ မျိုး ခွဲတွက်ပါတယ်)
+    function convert(type) {
+        let thb = document.getElementById('thbInput');
+        let mmk = document.getElementById('mmkInput');
+
+        if(type === 'THB') {
+            if(thb.value === "") { mmk.value = ""; return; }
+            // ဘတ်ပေးရင် -> ဘတ်ပေးနှုန်း (buyRate) နဲ့ မြှောက်ပြီး ကျပ်ပြပေးမယ်
+            mmk.value = (parseFloat(thb.value) * buyRate).toFixed(2);
+        } else if(type === 'MMK') {
+            if(mmk.value === "") { thb.value = ""; return; }
+            // ကျပ်ပေးရင် -> ကျပ်ပေးနှုန်း (sellRate) နဲ့ စားပြီး ဘတ်ပြပေးမယ်
+            thb.value = (parseFloat(mmk.value) / sellRate).toFixed(2);
+        }
+    }
+
+    // Admin Panel ဖွင့်/ပိတ် (Password က '1234' ပါ)
+    function toggleAdmin() {
+        let panel = document.getElementById('adminPanel');
+        if(panel.style.display === 'block') {
+            panel.style.display = 'none';
+        } else {
+            let password = prompt("Admin စကားဝှက်ကို ရိုက်ထည့်ပါ:");
+            if(password === "1234") {
+                panel.style.display = 'block';
+                document.getElementById('newBuyRate').value = buyRate;
+                document.getElementById('newSellRate').value = sellRate;
+            } else if(password !== null) {
+                alert("စကားဝှက် မှားယွင်းနေပါသည်။");
+            }
+        }
+    }
+
+    // Rate အသစ် ၂ မျိုးလုံးကို စက်ထဲ သိမ်းဆည်းခြင်း
+    function updateRates() {
+        let newBuy = document.getElementById('newBuyRate').value;
+        let newSell = document.getElementById('newSellRate').value;
+        
+        if(newBuy && newBuy > 0 && newSell && newSell > 0) {
+            buyRate = parseFloat(newBuy);
+            sellRate = parseFloat(newSell);
+            
+            localStorage.setItem('savedBuyRate', buyRate);
+            localStorage.setItem('savedSellRate', sellRate);
+            
+            displayRates();
+            
+            // ပြင်ပြီးတာနဲ့ ရိုက်ထားတဲ့ ဂဏန်းတွေကို ချက်ချင်း ပြန်တွက်ပေးခြင်း
+            convert('THB'); 
+            
+            document.getElementById('adminPanel').style.display = 'none';
+            alert("Rate ၂ မျိုးလုံးကို အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ။");
+        } else {
+            alert("မှန်ကန်သော ပမာဏများကို ရိုက်ထည့်ပါ။");
+        }
+    }
+</script>
+
+</body>
+</html>
